@@ -1,0 +1,141 @@
+---
+- name: Create integration test workspace
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: soupglasses-stow-
+  register: stow_workspace
+
+- name: Exercise the stow module
+  block:
+    - name: Create source package and target directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ stow_workspace.path }}/source/shell/.config/shell"
+        - "{{ stow_workspace.path }}/target"
+
+    - name: Create a packaged configuration file
+      ansible.builtin.copy:
+        dest: "{{ stow_workspace.path }}/source/shell/.config/shell/config"
+        content: "managed by soupglasses.stow\n"
+        mode: "0644"
+
+    - name: Stow the package without directory folding
+      soupglasses.stow.stow:
+        src: "{{ stow_workspace.path }}/source"
+        dest: "{{ stow_workspace.path }}/target"
+        package:
+          - shell
+        folding: false
+      register: stow_present
+
+    - name: Stow the package again
+      soupglasses.stow.stow:
+        src: "{{ stow_workspace.path }}/source"
+        dest: "{{ stow_workspace.path }}/target"
+        package:
+          - shell
+        folding: false
+      register: stow_present_again
+
+    - name: Inspect the managed file
+      ansible.builtin.stat:
+        path: "{{ stow_workspace.path }}/target/.config/shell/config"
+        follow: false
+      register: managed_file
+
+    - name: Verify present-state behavior
+      ansible.builtin.assert:
+        that:
+          - stow_present is changed
+          - stow_present_again is not changed
+          - managed_file.stat.islnk
+
+    - name: Unstow the package
+      soupglasses.stow.stow:
+        src: "{{ stow_workspace.path }}/source"
+        dest: "{{ stow_workspace.path }}/target"
+        package:
+          - shell
+        state: absent
+        folding: false
+      register: stow_absent
+
+    - name: Unstow the absent package again
+      soupglasses.stow.stow:
+        src: "{{ stow_workspace.path }}/source"
+        dest: "{{ stow_workspace.path }}/target"
+        package:
+          - shell
+        state: absent
+        folding: false
+      register: stow_absent_again
+
+    - name: Verify absent-state behavior
+      ansible.builtin.assert:
+        that:
+          - stow_absent is changed
+          - stow_absent_again is not changed
+
+    - name: Recreate the target parent directory for the conflict fixture
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/target/.config/shell"
+        state: directory
+        mode: "0755"
+
+    - name: Put a conflicting file in the target
+      ansible.builtin.copy:
+        dest: "{{ stow_workspace.path }}/target/.config/shell/config"
+        content: "local conflict\n"
+        mode: "0644"
+
+    - name: Predict forced conflict replacement in check mode
+      soupglasses.stow.stow:
+        src: "{{ stow_workspace.path }}/source"
+        dest: "{{ stow_workspace.path }}/target"
+        package:
+          - shell
+        folding: false
+        force: true
+      check_mode: true
+      register: stow_check_mode
+
+    - name: Read the conflict after check mode
+      ansible.builtin.slurp:
+        src: "{{ stow_workspace.path }}/target/.config/shell/config"
+      register: conflict_after_check
+
+    - name: Verify check mode preserved the conflict
+      ansible.builtin.assert:
+        that:
+          - stow_check_mode is changed
+          - conflict_after_check.content | b64decode == "local conflict\n"
+
+    - name: Replace the conflict
+      soupglasses.stow.stow:
+        src: "{{ stow_workspace.path }}/source"
+        dest: "{{ stow_workspace.path }}/target"
+        package:
+          - shell
+        folding: false
+        force: true
+      register: stow_forced
+
+    - name: Inspect the replacement
+      ansible.builtin.stat:
+        path: "{{ stow_workspace.path }}/target/.config/shell/config"
+        follow: false
+      register: forced_file
+
+    - name: Verify forced replacement
+      ansible.builtin.assert:
+        that:
+          - stow_forced is changed
+          - forced_file.stat.islnk
+  always:
+    - name: Remove integration test workspace
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}"
+        state: absent

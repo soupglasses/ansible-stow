@@ -1,0 +1,48 @@
+---
+name: Publish collection
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: galaxy
+    steps:
+      - name: Check out the collection
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible-core
+
+      - name: Verify the release tag matches galaxy.yml
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          collection_version="$(python -c 'import yaml; print(yaml.safe_load(open("galaxy.yml", encoding="utf-8"))["version"])')"
+          release_version="${RELEASE_TAG#v}"
+          if [ "$collection_version" != "$release_version" ]; then
+            echo "::error::galaxy.yml version $collection_version does not match release tag $RELEASE_TAG"
+            exit 1
+          fi
+
+      - name: Build the collection
+        run: ansible-galaxy collection build --output-path dist
+
+      - name: Publish the collection to Galaxy
+        env:
+          GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+        run: >-
+          ansible-galaxy collection publish
+          dist/soupglasses-stow-*.tar.gz
+          --api-key "$GALAXY_API_KEY"

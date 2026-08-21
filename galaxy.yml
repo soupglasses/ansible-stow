@@ -1,0 +1,24 @@
+---
+namespace: soupglasses
+name: stow
+version: 1.0.0
+readme: README.md
+authors:
+  - Sofie Finnes (@soupglasses)
+description: Manage GNU Stow packages from Ansible.
+license:
+  - GPL-3.0-or-later
+tags:
+  - dotfiles
+  - stow
+  - symlink
+dependencies: {}
+repository: https://github.com/soupglasses/ansible-stow
+documentation: https://github.com/soupglasses/ansible-stow#readme
+homepage: https://github.com/soupglasses/ansible-stow
+issues: https://github.com/soupglasses/ansible-stow/issues
+build_ignore:
+  - .gitignore
+  - .github
+  - tests
+  - changelogs/fragments

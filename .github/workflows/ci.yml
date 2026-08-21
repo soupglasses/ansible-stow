@@ -1,0 +1,59 @@
+---
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ansible-core: "2.19.*"
+            python: "3.11"
+          - ansible-core: "2.20.*"
+            python: "3.12"
+          - ansible-core: "2.21.*"
+            python: "3.12"
+    defaults:
+      run:
+        working-directory: ansible_collections/soupglasses/stow
+    steps:
+      - name: Check out the collection
+        uses: actions/checkout@v4
+        with:
+          path: ansible_collections/soupglasses/stow
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python }}"
+
+      - name: Install test dependencies
+        run: pip install "ansible-core==${{ matrix.ansible-core }}"
+
+      - name: Install GNU Stow
+        run: sudo apt-get update && sudo apt-get install --yes stow
+
+      - name: Run sanity tests
+        run: ansible-test sanity --color --venv
+
+      - name: Run unit tests
+        run: ansible-test units --color --venv
+
+      - name: Run integration tests
+        run: ansible-test integration stow --color --venv
+
+      - name: Build the Galaxy artifact
+        run: ansible-galaxy collection build --output-path dist
