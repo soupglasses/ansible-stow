@@ -6,6 +6,13 @@
   register: stow_workspace
 
 - name: Exercise the stow module
+  module_defaults:
+    soupglasses.stow.stow:
+      src: "{{ stow_workspace.path }}/source"
+      dest: "{{ stow_workspace.path }}/target"
+      package:
+        - shell
+      folding: false
   block:
     - name: Create source package and target directories
       ansible.builtin.file:
@@ -23,21 +30,11 @@
         mode: "0644"
 
     - name: Stow the package without directory folding
-      soupglasses.stow.stow:
-        src: "{{ stow_workspace.path }}/source"
-        dest: "{{ stow_workspace.path }}/target"
-        package:
-          - shell
-        folding: false
+      soupglasses.stow.stow: {}
       register: stow_present
 
     - name: Stow the package again
-      soupglasses.stow.stow:
-        src: "{{ stow_workspace.path }}/source"
-        dest: "{{ stow_workspace.path }}/target"
-        package:
-          - shell
-        folding: false
+      soupglasses.stow.stow: {}
       register: stow_present_again
 
     - name: Inspect the managed file
@@ -55,22 +52,12 @@
 
     - name: Unstow the package
       soupglasses.stow.stow:
-        src: "{{ stow_workspace.path }}/source"
-        dest: "{{ stow_workspace.path }}/target"
-        package:
-          - shell
         state: absent
-        folding: false
       register: stow_absent
 
     - name: Unstow the absent package again
       soupglasses.stow.stow:
-        src: "{{ stow_workspace.path }}/source"
-        dest: "{{ stow_workspace.path }}/target"
-        package:
-          - shell
         state: absent
-        folding: false
       register: stow_absent_again
 
     - name: Verify absent-state behavior
@@ -93,11 +80,6 @@
 
     - name: Predict forced conflict replacement in check mode
       soupglasses.stow.stow:
-        src: "{{ stow_workspace.path }}/source"
-        dest: "{{ stow_workspace.path }}/target"
-        package:
-          - shell
-        folding: false
         force: true
       check_mode: true
       register: stow_check_mode
@@ -115,11 +97,6 @@
 
     - name: Replace the conflict
       soupglasses.stow.stow:
-        src: "{{ stow_workspace.path }}/source"
-        dest: "{{ stow_workspace.path }}/target"
-        package:
-          - shell
-        folding: false
         force: true
       register: stow_forced
 
