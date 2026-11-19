@@ -95,7 +95,10 @@ def test_purge_removes_files_and_symlinks(tmp_path):
     symlink = tmp_path / "link"
     symlink.symlink_to(regular_file)
 
-    assert stow.purge([str(regular_file), str(symlink)]) is None
+    assert stow.purge([str(regular_file), str(symlink)]) == (
+        [str(regular_file), str(symlink)],
+        None,
+    )
     assert not regular_file.exists()
     assert not symlink.is_symlink()
 
@@ -104,8 +107,9 @@ def test_purge_reports_directories_instead_of_removing_them(tmp_path):
     directory = tmp_path / "directory"
     directory.mkdir()
 
-    error = stow.purge([str(directory)])
+    removed, error = stow.purge([str(directory)])
 
+    assert removed == []
     assert error.startswith('unable to remove conflicting path "')
     assert directory.is_dir()
 
