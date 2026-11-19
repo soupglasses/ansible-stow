@@ -271,7 +271,7 @@ def run_package(module, stow_bin, package, commands):
         if err:
             module.fail_json(msg=err)
 
-        dry_cmd = build_command(stow_bin, params, package, simulate=True)
+        commands.append(" ".join(dry_cmd))
         rc, _dry_stdout, dry_stderr = module.run_command(dry_cmd)
         if rc != 0:
             module.fail_json(
@@ -279,6 +279,7 @@ def run_package(module, stow_bin, package, commands):
                 "paths" % package,
                 rc=rc,
                 stderr=dry_stderr,
+                changed=True,
             )
 
         if module.check_mode:

@@ -133,6 +133,8 @@
       ansible.builtin.assert:
         that:
           - stow_forced is changed
+          - stow_forced.commands | length == 3
+          - stow_forced.commands[0] == stow_forced.commands[1]
           - forced_file.stat.islnk
   always:
     - name: Remove integration test workspace
