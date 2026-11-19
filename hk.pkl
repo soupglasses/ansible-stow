@@ -1,16 +1,12 @@
 amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.pkl"
 
 // ansible-test only runs inside an ansible_collections/<namespace>/<name>
-// directory with no .git above it, so each step checks out the staged files
-// into one outside the repository. A cancelled run skips the cleanup, so each
-// step reuses one directory.
-local function inCollection(step: String, command: String): String = """
-    dir="${XDG_CACHE_HOME:-$HOME/.cache}/hk-ansible-test/soupglasses.stow/\(step)"
-    rm -rf "$dir"
-    mkdir -p "$dir"
-    trap 'rm -rf "$dir"' EXIT
-    git checkout-index --all --prefix="$dir/ansible_collections/soupglasses/stow/"
-    cd "$dir/ansible_collections/soupglasses/stow"
+// directory, so each step checks out the staged files into one.
+local function inCollection(command: String): String = """
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    git checkout-index --all --prefix="$tmp/ansible_collections/soupglasses/stow/"
+    cd "$tmp/ansible_collections/soupglasses/stow"
     \(command)
     """
 
@@ -19,19 +15,19 @@ local python = #"--python "$(python3 -c 'import sys; print(*sys.version_info[:2]
 
 steps {
     ["sanity"] {
-        check = inCollection("sanity", "ansible-test sanity --color --venv \(python)")
+        check = inCollection("ansible-test sanity --color --venv \(python)")
     }
     // Wait for sanity to fill ansible-test's shared download cache, which
     // concurrent first runs corrupt.
     ["units"] {
         depends = List("sanity")
-        check = inCollection("units", "ansible-test units --color --venv \(python)")
+        check = inCollection("ansible-test units --color --venv \(python)")
     }
     ["integration"] {
         depends = List("sanity")
-        check = inCollection("integration", "ansible-test integration stow --color --venv")
+        check = inCollection("ansible-test integration stow --color --venv")
     }
     ["build"] {
-        check = inCollection("build", "ansible-galaxy collection build --output-path \"$dir/dist\"")
+        check = inCollection("ansible-galaxy collection build --output-path \"$tmp/dist\"")
     }
 }
