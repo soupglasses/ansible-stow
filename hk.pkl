@@ -10,14 +10,21 @@ local function inCollection(command: String): String = """
     \(command)
     """
 
+// Test only with the Python that mise pins, not every python3.X on PATH.
+local python = #"--python "$(python3 -c 'import sys; print(*sys.version_info[:2], sep=".")')""#
+
 steps {
     ["sanity"] {
-        check = inCollection("ansible-test sanity --color --venv")
+        check = inCollection("ansible-test sanity --color --venv \(python)")
     }
+    // Wait for sanity to fill ansible-test's shared download cache, which
+    // concurrent first runs corrupt.
     ["units"] {
-        check = inCollection("ansible-test units --color --venv")
+        depends = List("sanity")
+        check = inCollection("ansible-test units --color --venv \(python)")
     }
     ["integration"] {
+        depends = List("sanity")
         check = inCollection("ansible-test integration stow --color --venv")
     }
     ["build"] {
