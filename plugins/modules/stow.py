@@ -286,7 +286,10 @@ def run_package(module, stow_bin, package, commands):
     rc, _stdout, stderr = module.run_command(real_cmd)
     if rc != 0:
         module.fail_json(
-            msg=f'stow failed for package "{package}"', rc=rc, stderr=stderr
+            msg=f'stow failed for package "{package}"',
+            rc=rc,
+            stderr=stderr,
+            changed=purged,
         )
 
     return purged or links_changed(stderr)

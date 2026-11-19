@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import os
+from unittest.mock import Mock
+
+import pytest
 
 from ansible_collections.soupglasses.stow.plugins.modules import stow
 
@@ -120,3 +123,30 @@ def test_links_changed_handles_stow_idempotence():
     assert stow.links_changed(
         "UNLINK: .old\nUNLINK: .zshrc\nLINK: .zshrc => ../dotfiles/shell/.zshrc"
     )
+
+
+def test_failed_apply_reports_removed_conflict(tmp_path):
+    conflict = tmp_path / ".profile"
+    conflict.touch()
+    module = Mock(
+        params=dict(
+            src=str(tmp_path / "src"),
+            dest=str(tmp_path),
+            state="present",
+            folding=False,
+            force=True,
+        ),
+        check_mode=False,
+    )
+    module.run_command.side_effect = [
+        (1, "", "existing target is neither a link nor a directory: .profile"),
+        (0, "", "LINK: .profile => ../src/shell/.profile"),
+        (1, "", "Permission denied"),
+    ]
+    module.fail_json.side_effect = SystemExit
+
+    with pytest.raises(SystemExit):
+        stow.run_package(module, "stow", "shell", [])
+
+    assert not conflict.exists()
+    assert module.fail_json.call_args.kwargs["changed"] is True
