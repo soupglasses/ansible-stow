@@ -1,0 +1,5 @@
+[tools]
+python = "{{ get_env(name='PYTHON_VERSION', default='3.12') }}"
+uv = "0.13.9"
+ansible-core = "{{ get_env(name='ANSIBLE_CORE_VERSION', default='2.21') }}"
+hk = { version = "2.13.0", workflow = "release.yml" }

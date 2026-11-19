@@ -68,6 +68,17 @@ ansible-galaxy collection build
 
 The integration tests require GNU Stow.
 
+CI runs these checks through [hk](https://hk.jdx.dev) with the tools pinned
+in `mise.toml`. To run them on the staged files before each commit, from any
+checkout location, install the tools and the Git hook:
+
+```bash
+mise install
+hk install --mise
+```
+
+Run `hk check --all` to check the whole collection as CI does.
+
 See [PUBLISHING.md](PUBLISHING.md) for release and Galaxy configuration.
 
 ## License

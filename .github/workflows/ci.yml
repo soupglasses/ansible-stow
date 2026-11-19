@@ -20,40 +20,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ansible-core: "2.19.*"
+          - ansible-core: "2.19"
             python: "3.11"
-          - ansible-core: "2.20.*"
+          - ansible-core: "2.20"
             python: "3.12"
-          - ansible-core: "2.21.*"
+          - ansible-core: "2.21"
             python: "3.12"
-    defaults:
-      run:
-        working-directory: ansible_collections/soupglasses/stow
+    env:
+      ANSIBLE_CORE_VERSION: "${{ matrix.ansible-core }}"
+      PYTHON_VERSION: "${{ matrix.python }}"
     steps:
       - name: Check out the collection
         uses: actions/checkout@v4
-        with:
-          path: ansible_collections/soupglasses/stow
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "${{ matrix.python }}"
-
-      - name: Install test dependencies
-        run: pip install "ansible-core==${{ matrix.ansible-core }}"
 
       - name: Install GNU Stow
         run: sudo apt-get update && sudo apt-get install --yes stow
 
-      - name: Run sanity tests
-        run: ansible-test sanity --color --venv
+      - name: Install the tools pinned in mise.toml
+        uses: jdx/mise-action@v5
 
-      - name: Run unit tests
-        run: ansible-test units --color --venv
-
-      - name: Run integration tests
-        run: ansible-test integration stow --color --venv
-
-      - name: Build the Galaxy artifact
-        run: ansible-galaxy collection build --output-path dist
+      - name: Run the hk checks
+        run: hk check --all
