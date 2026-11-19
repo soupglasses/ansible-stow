@@ -162,6 +162,7 @@ def parse_conflicts(stderr, target):
     """Split stow's refusal into (recoverable_paths, unrecoverable_reasons)."""
     paths = []
     blockers = []
+    target_path = os.path.abspath(target)
 
     for line in stderr.splitlines():
         line = line.strip().lstrip("*").strip()
@@ -176,7 +177,6 @@ def parse_conflicts(stderr, target):
                 path = os.path.abspath(
                     os.path.join(target, match.group("path").strip())
                 )
-                target_path = os.path.abspath(target)
                 try:
                     contained = os.path.commonpath((target_path, path)) == target_path
                 except ValueError:
@@ -197,10 +197,7 @@ def purge(paths):
     """Remove conflicting files/symlinks. Returns an error string or None."""
     for path in paths:
         try:
-            if os.path.islink(path):
-                os.unlink(path)
-            else:
-                os.remove(path)
+            os.unlink(path)
         except OSError as err:
             return 'unable to remove conflicting path "%s": %s' % (path, err)
 
@@ -239,6 +236,7 @@ def run_package(module, stow_bin, package, commands):
     commands.append(" ".join(dry_cmd))
     rc, _dry_stdout, dry_stderr = module.run_command(dry_cmd)
 
+    purged = False
     if rc != 0:
         paths, blockers = parse_conflicts(dry_stderr, params["dest"])
 
@@ -271,6 +269,7 @@ def run_package(module, stow_bin, package, commands):
         if err:
             module.fail_json(msg=err)
 
+        purged = True
         commands.append(" ".join(dry_cmd))
         rc, _dry_stdout, dry_stderr = module.run_command(dry_cmd)
         if rc != 0:
@@ -281,23 +280,7 @@ def run_package(module, stow_bin, package, commands):
                 stderr=dry_stderr,
                 changed=True,
             )
-
-        if module.check_mode:
-            return True
-
-        real_cmd = build_command(stow_bin, params, package, simulate=False)
-        commands.append(" ".join(real_cmd))
-        rc, _stdout, stderr = module.run_command(real_cmd)
-        if rc != 0:
-            module.fail_json(
-                msg='stow failed for package "%s"' % package, rc=rc, stderr=stderr
-            )
-
-        return True
-
-    # stow reports its actions on stderr under --verbose; with --simulate
-    # nothing has been written yet, so this doubles as the change prediction.
-    if not links_changed(dry_stderr):
+    elif not links_changed(dry_stderr):
         return False
 
     if module.check_mode:
@@ -311,7 +294,7 @@ def run_package(module, stow_bin, package, commands):
             msg='stow failed for package "%s"' % package, rc=rc, stderr=stderr
         )
 
-    return links_changed(stderr)
+    return purged or links_changed(stderr)
 
 
 def main():
