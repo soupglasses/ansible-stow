@@ -246,9 +246,8 @@ def run_package(module, stow_bin, package, commands, changed):
 
         if blockers:
             fail(
-                msg='cannot stow package "{}" into "{}": {}'.format(
-                    package, params["dest"], "; ".join(blockers)
-                ),
+                msg=f'cannot stow package "{package}" into "{params["dest"]}": '
+                f'{"; ".join(blockers)}',
                 stderr=dry_stderr,
             )
 
@@ -261,8 +260,8 @@ def run_package(module, stow_bin, package, commands, changed):
 
         if not params["force"]:
             fail(
-                msg='conflicting paths for package "{}" (set force=true to '
-                "replace them): {}".format(package, ", ".join(paths)),
+                msg=f'conflicting paths for package "{package}" (set force=true to '
+                f'replace them): {", ".join(paths)}',
                 conflicts=paths,
                 stderr=dry_stderr,
             )
@@ -283,6 +282,9 @@ def run_package(module, stow_bin, package, commands, changed):
                 rc=rc,
                 stderr=dry_stderr,
             )
+
+    # stow reports its actions on stderr under --verbose; with --simulate
+    # nothing has been written yet, so this doubles as the change prediction.
     elif not links_changed(dry_stderr):
         return False
 
