@@ -113,6 +113,152 @@
           - stow_forced.commands | length == 3
           - stow_forced.commands[0] == stow_forced.commands[1]
           - forced_file.stat.islnk
+
+    - name: Create directories for a package that links into two target directories
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - source/split/.config/alpha
+        - source/split/.config/omega
+        - target/.config/alpha
+        - target/.config/omega
+
+    - name: Create the split package files
+      ansible.builtin.copy:
+        dest: "{{ stow_workspace.path }}/source/split/.config/{{ item }}/config"
+        content: "managed by soupglasses.stow\n"
+        mode: "0644"
+      loop:
+        - alpha
+        - omega
+
+    - name: Put conflicting files in both target directories
+      ansible.builtin.copy:
+        dest: "{{ stow_workspace.path }}/target/.config/{{ item }}/config"
+        content: "local conflict\n"
+        mode: "0644"
+      loop:
+        - alpha
+        - omega
+
+    - name: Make the second conflict impossible to remove
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/target/.config/omega"
+        state: directory
+        mode: "0555"
+
+    - name: Replace conflicts when only the first can be removed
+      soupglasses.stow.stow:
+        package:
+          - split
+        force: true
+      register: stow_partial_purge
+      ignore_errors: true
+
+    - name: Inspect the conflicts after the partial removal
+      ansible.builtin.stat:
+        path: "{{ stow_workspace.path }}/target/.config/{{ item }}/config"
+      loop:
+        - alpha
+        - omega
+      register: partial_purge_files
+
+    - name: Verify a partial removal is reported as a change
+      ansible.builtin.assert:
+        that:
+          - stow_partial_purge is failed
+          - stow_partial_purge is changed
+          - not partial_purge_files.results[0].stat.exists
+          - partial_purge_files.results[1].stat.exists
+
+    - name: Make the second target directory writable to clear its conflict
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/target/.config/omega"
+        state: directory
+        mode: "0755"
+
+    - name: Restore the first conflict
+      ansible.builtin.copy:
+        dest: "{{ stow_workspace.path }}/target/.config/alpha/config"
+        content: "local conflict\n"
+        mode: "0644"
+
+    - name: Remove the second conflict
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/target/.config/omega/config"
+        state: absent
+
+    - name: Make the second target directory read-only so linking into it fails
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/target/.config/omega"
+        state: directory
+        mode: "0555"
+
+    - name: Replace the conflict when linking fails afterwards
+      soupglasses.stow.stow:
+        package:
+          - split
+        force: true
+      register: stow_failed_apply
+      ignore_errors: true
+
+    - name: Make the second target directory writable again
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/target/.config/omega"
+        state: directory
+        mode: "0755"
+
+    - name: Inspect the first conflict after the failed apply
+      ansible.builtin.stat:
+        path: "{{ stow_workspace.path }}/target/.config/alpha/config"
+        follow: false
+      register: failed_apply_file
+
+    - name: Verify a failed apply after removing conflicts is reported as a change
+      ansible.builtin.assert:
+        that:
+          - stow_failed_apply is failed
+          - stow_failed_apply is changed
+          - stow_failed_apply.commands | length == 3
+          - not failed_apply_file.stat.exists or failed_apply_file.stat.islnk
+
+    - name: Create the blocked package and put a directory where it wants a file
+      ansible.builtin.file:
+        path: "{{ stow_workspace.path }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - source/blocked
+        - target/blocker
+
+    - name: Create the blocked package file
+      ansible.builtin.copy:
+        dest: "{{ stow_workspace.path }}/source/blocked/blocker"
+        content: "managed by soupglasses.stow\n"
+        mode: "0644"
+
+    - name: Unstow the split package before stowing it with the blocked one
+      soupglasses.stow.stow:
+        package:
+          - split
+        state: absent
+
+    - name: Stow a package followed by one that fails
+      soupglasses.stow.stow:
+        package:
+          - split
+          - blocked
+      register: stow_later_failure
+      ignore_errors: true
+
+    - name: Verify a later package failure keeps the earlier change
+      ansible.builtin.assert:
+        that:
+          - stow_later_failure is failed
+          - stow_later_failure is changed
+          - stow_later_failure.commands | length == 3
   always:
     - name: Remove integration test workspace
       ansible.builtin.file:

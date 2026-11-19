@@ -189,14 +189,16 @@ def parse_conflicts(stderr, target):
 
 
 def purge(paths):
-    """Remove conflicting files/symlinks. Returns an error string or None."""
+    """Remove conflicting files/symlinks. Returns (removed_paths, error or None)."""
+    removed = []
     for path in paths:
         try:
             os.unlink(path)
         except OSError as err:
-            return f'unable to remove conflicting path "{path}": {err}'
+            return removed, f'unable to remove conflicting path "{path}": {err}'
+        removed.append(path)
 
-    return None
+    return removed, None
 
 
 def links_changed(stderr):
@@ -223,20 +225,27 @@ def links_changed(stderr):
     return linked != unlinked
 
 
-def run_package(module, stow_bin, package, commands):
-    """Apply one package. Returns True when the filesystem changed."""
+def run_package(module, stow_bin, package, commands, changed):
+    """Apply one package. Returns True when the filesystem changed.
+
+    ``changed`` is whether earlier packages already changed the filesystem, so
+    a failure here reports it.
+    """
     params = module.params
+    purged = False
+
+    def fail(**kwargs):
+        module.fail_json(changed=changed or purged, commands=commands, **kwargs)
 
     dry_cmd = build_command(stow_bin, params, package, simulate=True)
     commands.append(" ".join(dry_cmd))
     rc, _dry_stdout, dry_stderr = module.run_command(dry_cmd)
 
-    purged = False
     if rc != 0:
         paths, blockers = parse_conflicts(dry_stderr, params["dest"])
 
         if blockers:
-            module.fail_json(
+            fail(
                 msg='cannot stow package "{}" into "{}": {}'.format(
                     package, params["dest"], "; ".join(blockers)
                 ),
@@ -244,14 +253,14 @@ def run_package(module, stow_bin, package, commands):
             )
 
         if not paths:
-            module.fail_json(
+            fail(
                 msg=f'stow refused to act on package "{package}"',
                 rc=rc,
                 stderr=dry_stderr,
             )
 
         if not params["force"]:
-            module.fail_json(
+            fail(
                 msg='conflicting paths for package "{}" (set force=true to '
                 "replace them): {}".format(package, ", ".join(paths)),
                 conflicts=paths,
@@ -261,19 +270,18 @@ def run_package(module, stow_bin, package, commands):
         if module.check_mode:
             return True
 
-        err = purge(paths)
+        removed, err = purge(paths)
+        purged = bool(removed)
         if err:
-            module.fail_json(msg=err)
+            fail(msg=err)
 
-        purged = True
         commands.append(" ".join(dry_cmd))
         rc, _dry_stdout, dry_stderr = module.run_command(dry_cmd)
         if rc != 0:
-            module.fail_json(
+            fail(
                 msg=f'package "{package}" still conflicts after removing conflicting paths',
                 rc=rc,
                 stderr=dry_stderr,
-                changed=True,
             )
     elif not links_changed(dry_stderr):
         return False
@@ -285,11 +293,10 @@ def run_package(module, stow_bin, package, commands):
     commands.append(" ".join(real_cmd))
     rc, _stdout, stderr = module.run_command(real_cmd)
     if rc != 0:
-        module.fail_json(
+        fail(
             msg=f'stow failed for package "{package}"',
             rc=rc,
             stderr=stderr,
-            changed=purged,
         )
 
     return purged or links_changed(stderr)
@@ -322,7 +329,7 @@ def main():
     commands = []
 
     for package in module.params["package"]:
-        changed = run_package(module, stow_bin, package, commands) or changed
+        changed = run_package(module, stow_bin, package, commands, changed) or changed
 
     module.exit_json(changed=changed, commands=commands)
 
